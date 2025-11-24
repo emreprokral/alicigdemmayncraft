@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Minecraft - Smart Board Edition</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; user-select: none; -webkit-user-select: none; }
+        
+        /* UI Elementleri */
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><path d="M10 0v20M0 10h20" stroke="white" stroke-width="2"/></svg>');
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            opacity: 0.8;
+            z-index: 10;
+        }
+        #instructions {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            pointer-events: none;
+            border-radius: 4px;
+            font-size: 14px;
+            z-index: 5;
+        }
+        #error-message {
+            position: absolute;
+            top: 20%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #FFDDDD;
+            background: rgba(150, 0, 0, 0.9);
+            padding: 15px;
+            border-radius: 5px;
+            text-align: center;
+            font-weight: bold;
+            z-index: 1000;
+            display: none; 
+        }
+        #hotbar {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 5px;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 5px;
+            border-radius: 5px;
+            z-index: 20;
+        }
+        .slot {
+            width: 40px;
+            height: 40px;
+            border: 2px solid rgba(255,255,255,0.3);
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        .slot.active {
+            border-color: #00FF00;
+            transform: scale(1.1);
+        }
+
+        /* --- BAŞLANGIÇ SORUSU MODALI --- */
+        #startup-modal {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.85);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            z-index: 2000;
+            color: white;
+        }
+        .modal-btn {
+            background: #4CAF50;
+            border: none;
+            color: white;
+            padding: 15px 32px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 20px;
+            margin: 10px;
+            cursor: pointer;
+            border-radius: 8px;
+            width: 300px;
+        }
+        .modal-btn.no { background: #f44336; }
+        
+        /* --- DOKUNMATİK KONTROLLER (Varsayılan olarak gizli) --- */
+        #touch-controls {
+            display: none; /* JS ile açılacak */
+            z-index: 100;
+        }
+
+        .touch-btn {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            border-radius: 10px;
+            color: white;
+            font-size: 24px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            user-select: none;
+            touch-action: manipulation;
+        }
+        .touch-btn:active { background: rgba(255, 255, 255, 0.5); }
+
+        /* Yön Tuşları (Sol Alt) */
+        #btn-up { bottom: 160px; left: 110px; width: 80px; height: 80px; }
+        #btn-down { bottom: 60px; left: 110px; width: 80px; height: 80px; }
+        #btn-left { bottom: 60px; left: 20px; width: 80px; height: 80px; }
+        #btn-right { bottom: 60px; left: 200px; width: 80px; height: 80px; }
+
+        /* Aksiyon Tuşları (Sağ Taraf) */
+        #btn-jump { bottom: 60px; right: 20px; width: 90px; height: 90px; border-radius: 50%; background: rgba(0, 255, 0, 0.3); font-size: 16px; }
+        #btn-fly { bottom: 170px; right: 20px; width: 60px; height: 60px; border-radius: 50%; background: rgba(0, 200, 255, 0.3); font-size: 12px; }
+        #btn-break { bottom: 60px; right: 130px; width: 80px; height: 80px; background: rgba(255, 0, 0, 0.3); font-size: 16px; }
+        #btn-place { bottom: 160px; right: 130px; width: 80px; height: 80px; background: rgba(255, 165, 0, 0.3); font-size: 16px; }
+
+        #blocker {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            display: none; /* JS Kontrolünde */
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 24px;
+            flex-direction: column;
+            z-index: 999;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Başlangıç Modalı -->
+    <div id="startup-modal">
+        <h1 style="margin-bottom: 30px;">Akıllı Tahtadan mı oynuyorsun?</h1>
+        <button class="modal-btn" onclick="setSmartBoard(true)">EVET (Dokunmatik)</button>
+        <button class="modal-btn no" onclick="setSmartBoard(false)">HAYIR (Klavye/Mouse)</button>
+    </div>
+
+    <!-- Oyun UI -->
+    <div id="crosshair"></div>
+    <div id="instructions">
+        <b>WASD</b> Hareket | <b>SPACE</b> Zıpla<br>
+        <b>F</b> Uçma | <b>SHIFT</b> Alçal
+    </div>
+    
+    <div id="hotbar"></div>
+    <div id="error-message">
+        Doku Yükleme Hatası (CORS). Live Server kullanın.
+    </div>
+
+    <!-- Mouse Modu İçin Blocker -->
+    <div id="blocker">
+        <div>Oynamak İçin Tıklayın</div>
+    </div>
+
+    <!-- Dokunmatik Kontroller -->
+    <div id="touch-controls">
+        <!-- Yön -->
+        <div id="btn-up" class="touch-btn">▲</div>
+        <div id="btn-down" class="touch-btn">▼</div>
+        <div id="btn-left" class="touch-btn">◄</div>
+        <div id="btn-right" class="touch-btn">►</div>
+
+        <!-- Aksiyon -->
+        <div id="btn-jump" class="touch-btn">ZIPLA</div>
+        <div id="btn-break" class="touch-btn">KIR</div>
+        <div id="btn-place" class="touch-btn">KOY</div>
+        <div id="btn-fly" class="touch-btn">UÇ</div>
+    </div>
+
+    <!-- Three.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        // --- 1. AYARLAR VE DURUM ---
+        const config = {
+            chunkSize: 32,
+            gravity: 25.0,
+            jumpStrength: 7.0, 
+            movementAcceleration: 40.0,
+            speed: 5.0,
+            reach: 8, // Dokunmatik için biraz artırdım
+            maxInstances: 32 * 32 * 5
+        };
+
+        const state = {
+            moveForward: false,
+            moveBackward: false,
+            moveLeft: false,
+            moveRight: false,
+            canJump: false,
+            velocity: new THREE.Vector3(),
+            direction: new THREE.Vector3(),
+            selectedBlockType: 'grass',
+            isLocked: false, // Pointer Lock durumu
+            isFlying: false,
+            isSmartBoard: false // Akıllı tahta modu
+        };
+
+        // UI Elementleri
+        const modal = document.getElementById('startup-modal');
+        const touchControls = document.getElementById('touch-controls');
+        const blocker = document.getElementById('blocker');
+        const instructions = document.getElementById('instructions');
+
+        // --- 2. MOD SEÇİMİ ---
+        function setSmartBoard(isSmart) {
+            state.isSmartBoard = isSmart;
+            modal.style.display = 'none';
+
+            if (state.isSmartBoard) {
+                // Akıllı Tahta Modu
+                touchControls.style.display = 'block';
+                blocker.style.display = 'none'; // Tıklama ekranı yok
+                instructions.style.display = 'none'; // Kendi butonları var
+                state.isLocked = true; // Oyunu aktif say
+                
+                // Dokunmatik Event Listenerlarını Ayarla
+                setupTouchEvents();
+            } else {
+                // PC Modu
+                blocker.style.display = 'flex';
+                // Standart Pointer Lock Listenerları
+                setupPointerLock();
+            }
+            // Başlangıç materyallerini yükle
+            setupMaterials();
+        }
+
+        // --- 3. THREE.JS TEMEL ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB); 
+        scene.fog = new THREE.Fog(0x87CEEB, 10, config.chunkSize * 0.75); 
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: false });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+        dirLight.position.set(50, 100, 50);
+        scene.add(dirLight);
+
+        // --- 4. BLOK VE DÜNYA YÖNETİMİ ---
+        const world = new Map(); 
+        let instanceMesh;
+        let instanceCount = 0;
+        const dummy = new THREE.Object3D();
+        const textureLoader = new THREE.TextureLoader();
+        let mainMaterial;
+
+        const blockTypes = {
+            grass:  { color: '#5C9E66' }, dirt:   { color: '#5C4033' }, stone:  { color: '#7D7D7D' },
+            wood:   { color: '#5C4033' }, leaves: { color: '#3A7A3A' }, plank:  { color: '#9C7A4A' }
+        };
+        const blockKeys = Object.keys(blockTypes);
+
+        function setupMaterials() {
+            // Basit yedek doku
+            const c = document.createElement('canvas'); c.width=64; c.height=64;
+            const ctx = c.getContext('2d'); ctx.fillStyle = '#777'; ctx.fillRect(0,0,64,64); ctx.fillStyle='#999'; ctx.fillRect(10,10,44,44);
+            const fallbackTexture = new THREE.CanvasTexture(c);
+            fallbackTexture.magFilter = THREE.NearestFilter;
+
+            textureLoader.load('alicigdem.png', 
+                (tex) => {
+                    tex.magFilter = THREE.NearestFilter;
+                    mainMaterial = new THREE.MeshLambertMaterial({ map: tex });
+                    initializeGame(mainMaterial);
+                },
+                undefined,
+                (err) => {
+                    console.error("Doku hatası", err);
+                    document.getElementById('error-message').style.display = 'block';
+                    mainMaterial = new THREE.MeshLambertMaterial({ map: fallbackTexture });
+                    initializeGame(mainMaterial);
+                }
+            );
+        }
+
+        function initializeGame(mat) {
+            const geo = new THREE.BoxGeometry(1, 1, 1);
+            instanceMesh = new THREE.InstancedMesh(geo, mat, config.maxInstances);
+            instanceMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+            scene.add(instanceMesh);
+            generateWorld();
+            animate();
+        }
+
+        function updateBlockMatrix(index, x, y, z) {
+            if (x === null) {
+                instanceMesh.setMatrixAt(index, new THREE.Matrix4().makeScale(0,0,0));
+            } else {
+                dummy.position.set(x, y, z);
+                dummy.updateMatrix();
+                instanceMesh.setMatrixAt(index, dummy.matrix);
+            }
+            instanceMesh.instanceMatrix.needsUpdate = true;
+        }
+
+        function addBlockToWorld(x, y, z, type) {
+            const key = `${x},${y},${z}`;
+            if (world.has(key)) return;
+            const index = instanceCount++;
+            world.set(key, { type: type, index: index });
+            updateBlockMatrix(index, x, y, z);
+        }
+
+        function removeBlockFromWorld(x, y, z) {
+            const key = `${x},${y},${z}`;
+            const d = world.get(key);
+            if (!d) return;
+            updateBlockMatrix(d.index, null, null, null);
+            world.delete(key);
+        }
+
+        function generateWorld() {
+            const off = config.chunkSize / 2;
+            for (let x = -off; x < off; x++) {
+                for (let z = -off; z < off; z++) {
+                    addBlockToWorld(x, 0, z, 'grass');
+                    addBlockToWorld(x, -1, z, 'dirt');
+                    addBlockToWorld(x, -2, z, 'stone');
+                    if (Math.random() < 0.005) createTree(x, 1, z);
+                }
+            }
+        }
+        function createTree(x,y,z) {
+            addBlockToWorld(x, y, z, 'wood'); addBlockToWorld(x, y+1, z, 'wood'); addBlockToWorld(x, y+2, z, 'wood');
+            for(let i=-1; i<=1; i++) for(let j=-1; j<=1; j++) addBlockToWorld(x+i, y+3, z+j, 'leaves');
+            addBlockToWorld(x, y+4, z, 'leaves');
+        }
+
+        // --- 5. KONTROLLER ---
+        const controls = new THREE.Object3D();
+        controls.add(camera);
+        scene.add(controls);
+        controls.position.y = 2;
+
+        // PC Pointer Lock Kurulumu
+        function setupPointerLock() {
+            blocker.addEventListener('click', () => document.body.requestPointerLock());
+            document.addEventListener('pointerlockchange', () => {
+                if (document.pointerLockElement === document.body) {
+                    state.isLocked = true;
+                    blocker.style.display = 'none';
+                } else {
+                    state.isLocked = false;
+                    blocker.style.display = 'flex';
+                }
+            });
+            document.addEventListener('mousemove', (event) => {
+                if (state.isLocked) {
+                    controls.rotation.y -= event.movementX * 0.002;
+                    camera.rotation.x -= event.movementY * 0.002;
+                    camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotation.x));
+                }
+            });
+        }
+
+        // Akıllı Tahta Dokunmatik Kurulumu
+        function setupTouchEvents() {
+            // Yön Tuşları
+            const bindBtn = (id, prop) => {
+                const el = document.getElementById(id);
+                el.addEventListener('mousedown', () => state[prop] = true);
+                el.addEventListener('mouseup', () => state[prop] = false);
+                el.addEventListener('touchstart', (e) => { e.preventDefault(); state[prop] = true; });
+                el.addEventListener('touchend', (e) => { e.preventDefault(); state[prop] = false; });
+            };
+            
+            bindBtn('btn-up', 'moveForward');
+            bindBtn('btn-down', 'moveBackward');
+            bindBtn('btn-left', 'moveLeft'); // Düzeltilmiş (A Tuşu)
+            bindBtn('btn-right', 'moveRight'); // Düzeltilmiş (D Tuşu)
+
+            // Aksiyon Tuşları
+            // Zıpla
+            const btnJump = document.getElementById('btn-jump');
+            const jumpAction = (e) => {
+                e.preventDefault();
+                if(state.isFlying) state.velocity.y = config.movementAcceleration/2;
+                else if(state.canJump) { state.velocity.y += config.jumpStrength; state.canJump = false; }
+            };
+            btnJump.addEventListener('mousedown', jumpAction);
+            btnJump.addEventListener('touchstart', jumpAction);
+            // Bırakınca uçuşu durdur
+            const stopFly = (e) => { if(state.isFlying) state.velocity.y = 0; };
+            btnJump.addEventListener('mouseup', stopFly);
+            btnJump.addEventListener('touchend', stopFly);
+
+            // Uçma
+            const btnFly = document.getElementById('btn-fly');
+            const flyToggle = (e) => { 
+                e.preventDefault(); 
+                state.isFlying = !state.isFlying; 
+                state.velocity.y = 0; 
+                if(!state.isFlying) state.canJump = false;
+            };
+            btnFly.addEventListener('mousedown', flyToggle);
+            btnFly.addEventListener('touchstart', flyToggle);
+
+            // Kırma (Sol Tık Simülasyonu)
+            const btnBreak = document.getElementById('btn-break');
+            const breakAction = (e) => { e.preventDefault(); performRaycastAction(0); };
+            btnBreak.addEventListener('mousedown', breakAction);
+            btnBreak.addEventListener('touchstart', breakAction);
+
+            // Koyma (Sağ Tık Simülasyonu)
+            const btnPlace = document.getElementById('btn-place');
+            const placeAction = (e) => { e.preventDefault(); performRaycastAction(2); };
+            btnPlace.addEventListener('mousedown', placeAction);
+            btnPlace.addEventListener('touchstart', placeAction);
+
+            // KAMERA DÖNDÜRME (SÜRÜKLEME)
+            // Ekranın boş bir yerine dokunup sürükleyince kamera döner
+            let lastTouchX = 0;
+            let lastTouchY = 0;
+            
+            document.addEventListener('touchstart', (e) => {
+                // Eğer butonlara dokunulmuyorsa
+                if (!e.target.classList.contains('touch-btn')) {
+                    lastTouchX = e.touches[0].clientX;
+                    lastTouchY = e.touches[0].clientY;
+                }
+            }, {passive: false});
+
+            document.addEventListener('touchmove', (e) => {
+                if (!e.target.classList.contains('touch-btn')) {
+                    // Sayfa kaydırmayı engelle
+                    // e.preventDefault(); 
+                    const touchX = e.touches[0].clientX;
+                    const touchY = e.touches[0].clientY;
+                    
+                    const deltaX = touchX - lastTouchX;
+                    const deltaY = touchY - lastTouchY;
+
+                    controls.rotation.y -= deltaX * 0.005;
+                    camera.rotation.x -= deltaY * 0.005;
+                    camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotation.x));
+
+                    lastTouchX = touchX;
+                    lastTouchY = touchY;
+                }
+            }, {passive: false});
+        }
+
+        // Ortak Raycast İşlemi (Mouse ve Dokunmatik için)
+        const raycaster = new THREE.Raycaster();
+        raycaster.far = config.reach;
+        const center = new THREE.Vector2(0,0);
+
+        function performRaycastAction(button) {
+            raycaster.setFromCamera(center, camera);
+            // Sadece InstancedMesh'i kontrol ediyoruz
+            const intersects = raycaster.intersectObject(instanceMesh);
+
+            if (intersects.length > 0) {
+                const intersect = intersects[0];
+                const instanceIndex = intersect.instanceId;
+                
+                let blockPosKey = null;
+                for (const [key, data] of world.entries()) {
+                    if (data.index === instanceIndex) { blockPosKey = key; break; }
+                }
+                if (!blockPosKey) return;
+                const [x, y, z] = blockPosKey.split(',').map(Number);
+
+                if (button === 0) { // Kır
+                    removeBlockFromWorld(x, y, z);
+                } else if (button === 2) { // Koy
+                    // InstancedMesh normal hesaplaması bazen hatalı olabilir,
+                    // Basit bir yaklaşım: tıklanan noktaya göre yüzeyi bul
+                    let dx=0, dy=0, dz=0;
+                    const p = intersect.point;
+                    if(Math.abs(p.x - Math.round(p.x)) < 0.01) dx = p.x > x ? 1 : -1; // X yüzeyi
+                    else if(Math.abs(p.y - Math.round(p.y)) < 0.01) dy = p.y > y ? 1 : -1; // Y yüzeyi
+                    else dz = p.z > z ? 1 : -1; // Z yüzeyi
+                    
+                    // Eğer yukarıdaki hassas kontrol çalışmazsa basit fark kullan
+                    if(dx===0 && dy===0 && dz===0) {
+                        if(Math.abs(p.y - y) > 0.49) dy = Math.sign(p.y - y);
+                        else if(Math.abs(p.x - x) > 0.49) dx = Math.sign(p.x - x);
+                        else dz = Math.sign(p.z - z);
+                    }
+
+                    const nx = x + dx, ny = y + dy, nz = z + dz;
+                    // Oyuncu çarpışma kontrolü
+                    const playerPos = controls.position.clone();
+                    playerPos.y -= 1;
+                    if (new THREE.Vector3(nx, ny, nz).distanceTo(playerPos) > 1.2) {
+                        addBlockToWorld(nx, ny, nz, state.selectedBlockType);
+                    }
+                }
+            }
+        }
+
+        // PC Mouse Tıklama Listener
+        document.addEventListener('mousedown', (event) => {
+            if (!state.isLocked || state.isSmartBoard) return; // Smart board için butonları kullanıyoruz
+            performRaycastAction(event.button);
+        });
+
+        // Klavye Listener (Her iki modda da çalışır, akıllı tahtada klavye takılıysa işe yarar)
+        document.addEventListener('keydown', (e) => {
+            switch(e.code) {
+                case 'KeyW': state.moveForward = true; break;
+                case 'KeyS': state.moveBackward = true; break;
+                case 'KeyA': state.moveRight = true; break; // A sağ (ters)
+                case 'KeyD': state.moveLeft = true; break; // D sol (ters)
+                case 'Space': 
+                    if(state.isFlying) state.velocity.y = config.movementAcceleration/2;
+                    else if(state.canJump) { state.velocity.y += config.jumpStrength; state.canJump = false; }
+                    break;
+                case 'ShiftLeft': if(state.isFlying) state.velocity.y = -config.movementAcceleration/2; break;
+                case 'KeyF': state.isFlying = !state.isFlying; state.velocity.y = 0; if(!state.isFlying) state.canJump=false; break;
+                case 'Digit1': selectBlock(0); break;
+                case 'Digit2': selectBlock(1); break;
+                case 'Digit3': selectBlock(2); break;
+                case 'Digit4': selectBlock(3); break;
+                case 'Digit5': selectBlock(4); break;
+            }
+        });
+        document.addEventListener('keyup', (e) => {
+            switch(e.code) {
+                case 'KeyW': state.moveForward = false; break;
+                case 'KeyS': state.moveBackward = false; break;
+                case 'KeyA': state.moveRight = false; break;
+                case 'KeyD': state.moveLeft = false; break;
+                case 'Space': case 'ShiftLeft': if(state.isFlying) state.velocity.y = 0; break;
+            }
+        });
+
+        // Fizik Döngüsü
+        let prevTime = performance.now();
+        const highlightGeo = new THREE.BoxGeometry(1.01, 1.01, 1.01);
+        const highlightMesh = new THREE.LineSegments(new THREE.WireframeGeometry(highlightGeo), new THREE.LineBasicMaterial({ color: 0x000000 }));
+        scene.add(highlightMesh); highlightMesh.visible = false;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = performance.now();
+            const delta = (time - prevTime) / 1000;
+            prevTime = time;
+
+            if (state.isLocked) {
+                // Raycast Highlight
+                raycaster.setFromCamera(center, camera);
+                const intersects = raycaster.intersectObject(instanceMesh);
+                if(intersects.length > 0) {
+                    const m = new THREE.Matrix4();
+                    instanceMesh.getMatrixAt(intersects[0].instanceId, m);
+                    m.decompose(highlightMesh.position, highlightMesh.rotation, highlightMesh.scale);
+                    highlightMesh.visible = true;
+                } else highlightMesh.visible = false;
+
+                // Hareket
+                state.velocity.x -= state.velocity.x * 10.0 * delta;
+                state.velocity.z -= state.velocity.z * 10.0 * delta;
+
+                if (!state.isFlying) state.velocity.y -= config.gravity * delta;
+                
+                state.direction.z = Number(state.moveForward) - Number(state.moveBackward);
+                state.direction.x = Number(state.moveRight) - Number(state.moveLeft);
+                state.direction.normalize();
+
+                if (state.moveForward || state.moveBackward) state.velocity.z -= state.direction.z * config.movementAcceleration * delta;
+                if (state.moveLeft || state.moveRight) state.velocity.x -= state.direction.x * config.movementAcceleration * delta;
+
+                controls.translateX(state.velocity.x * delta);
+                controls.translateZ(state.velocity.z * delta);
+                controls.position.y += state.velocity.y * delta;
+
+                // Zemin Kontrolü
+                if (!state.isFlying) {
+                    // Basit bir yükseklik kontrolü (Raycast yerine, çünkü InstancedMesh raycast pahalı olabilir her frame'de)
+                    // Ancak burada doğruluk için raycast kullanıyoruz (sadece aşağı yönlü)
+                    const downRay = new THREE.Raycaster(controls.position, new THREE.Vector3(0,-1,0), 0, 1.6);
+                    const hits = downRay.intersectObject(instanceMesh);
+                    if (hits.length > 0) {
+                        if (state.velocity.y < 0) {
+                            state.velocity.y = 0;
+                            const m = new THREE.Matrix4();
+                            instanceMesh.getMatrixAt(hits[0].instanceId, m);
+                            const p = new THREE.Vector3(); m.decompose(p, new THREE.Quaternion(), new THREE.Vector3());
+                            controls.position.y = p.y + 1.6;
+                            state.canJump = true;
+                        }
+                    } else state.canJump = false;
+                }
+                if (controls.position.y < -10) { state.velocity.y=0; controls.position.set(0,10,0); }
+            }
+            renderer.render(scene, camera);
+        }
+
+        // Hotbar
+        const hotbar = document.getElementById('hotbar');
+        blockKeys.slice(0, 5).forEach((key, index) => {
+            const el = document.createElement('div');
+            el.className = 'slot ' + (index === 0 ? 'active' : '');
+            el.style.backgroundColor = blockTypes[key].color;
+            el.onclick = () => selectBlock(index);
+            hotbar.appendChild(el);
+        });
+        function selectBlock(index) {
+            if(index >= blockKeys.length) return;
+            state.selectedBlockType = blockKeys[index];
+            document.querySelectorAll('.slot').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.slot')[index].classList.add('active');
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+    </script>
+</body>
+</html>

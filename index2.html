@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Minecraft - Infinite Flat World</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; user-select: none; -webkit-user-select: none; }
+        
+        #crosshair {
+            position: absolute; top: 50%; left: 50%; width: 20px; height: 20px;
+            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><path d="M10 0v20M0 10h20" stroke="white" stroke-width="2"/></svg>');
+            transform: translate(-50%, -50%); pointer-events: none; opacity: 0.8; z-index: 10;
+        }
+        #instructions {
+            position: absolute; top: 10px; left: 10px; color: white; background: rgba(0, 0, 0, 0.5);
+            padding: 10px; pointer-events: none; border-radius: 4px; font-size: 14px; z-index: 5;
+        }
+        #error-message {
+            position: absolute; top: 20%; left: 50%; transform: translate(-50%, -50%);
+            color: #FFDDDD; background: rgba(150, 0, 0, 0.9); padding: 15px; border-radius: 5px;
+            text-align: center; font-weight: bold; z-index: 1000; display: none; 
+        }
+        #hotbar {
+            position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 5px; background: rgba(0, 0, 0, 0.3); padding: 5px; border-radius: 5px; z-index: 20;
+        }
+        .slot {
+            width: 40px; height: 40px; border: 2px solid rgba(255,255,255,0.3); cursor: pointer; transition: transform 0.1s;
+        }
+        .slot.active { border-color: #00FF00; transform: scale(1.1); }
+
+        /* Başlangıç Modalı */
+        #startup-modal {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.85); display: flex; justify-content: center;
+            align-items: center; flex-direction: column; z-index: 2000; color: white;
+        }
+        .modal-btn {
+            background: #4CAF50; border: none; color: white; padding: 15px 32px;
+            text-align: center; text-decoration: none; display: inline-block; font-size: 20px;
+            margin: 10px; cursor: pointer; border-radius: 8px; width: 300px;
+        }
+        .modal-btn.no { background: #f44336; }
+        
+        /* Dokunmatik Kontroller */
+        #touch-controls { display: none; z-index: 100; }
+        .touch-btn {
+            position: absolute; background: rgba(255, 255, 255, 0.2); border: 2px solid rgba(255, 255, 255, 0.5);
+            border-radius: 10px; color: white; font-size: 24px; display: flex; justify-content: center;
+            align-items: center; user-select: none; touch-action: manipulation;
+        }
+        .touch-btn:active { background: rgba(255, 255, 255, 0.5); }
+
+        #btn-up { bottom: 160px; left: 110px; width: 80px; height: 80px; }
+        #btn-down { bottom: 60px; left: 110px; width: 80px; height: 80px; }
+        #btn-left { bottom: 60px; left: 20px; width: 80px; height: 80px; }
+        #btn-right { bottom: 60px; left: 200px; width: 80px; height: 80px; }
+
+        #btn-jump { bottom: 60px; right: 20px; width: 90px; height: 90px; border-radius: 50%; background: rgba(0, 255, 0, 0.3); font-size: 16px; }
+        #btn-fly { bottom: 170px; right: 20px; width: 60px; height: 60px; border-radius: 50%; background: rgba(0, 200, 255, 0.3); font-size: 12px; }
+        #btn-break { bottom: 60px; right: 130px; width: 80px; height: 80px; background: rgba(255, 0, 0, 0.3); font-size: 16px; }
+        #btn-place { bottom: 160px; right: 130px; width: 80px; height: 80px; background: rgba(255, 165, 0, 0.3); font-size: 16px; }
+
+        #blocker {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.5); display: none; justify-content: center;
+            align-items: center; color: white; font-size: 24px; flex-direction: column; z-index: 999;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="startup-modal">
+        <h1 style="margin-bottom: 30px;">Akıllı Tahtadan mı oynuyorsun?</h1>
+        <button class="modal-btn" onclick="setSmartBoard(true)">EVET (Dokunmatik)</button>
+        <button class="modal-btn no" onclick="setSmartBoard(false)">HAYIR (Klavye/Mouse)</button>
+    </div>
+
+    <div id="crosshair"></div>
+    <div id="instructions">
+        <b>WASD</b> Hareket | <b>SPACE</b> Zıpla<br>
+        <b>F</b> Uçma | <b>SHIFT</b> Alçal
+    </div>
+    
+    <div id="hotbar"></div>
+    <div id="error-message">Doku Hatası. Live Server kullanın.</div>
+    <div id="blocker"><div>Oynamak İçin Tıklayın</div></div>
+
+    <div id="touch-controls">
+        <div id="btn-up" class="touch-btn">▲</div>
+        <div id="btn-down" class="touch-btn">▼</div>
+        <div id="btn-left" class="touch-btn">◄</div>
+        <div id="btn-right" class="touch-btn">►</div>
+        <div id="btn-jump" class="touch-btn">ZIPLA</div>
+        <div id="btn-break" class="touch-btn">KIR</div>
+        <div id="btn-place" class="touch-btn">KOY</div>
+        <div id="btn-fly" class="touch-btn">UÇ</div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        // --- AYARLAR ---
+        const config = {
+            gravity: 25.0,
+            jumpStrength: 7.0, 
+            movementAcceleration: 40.0,
+            reach: 8,
+            maxInstances: 20000, // Sonsuz dünya için artırıldı
+            renderDistance: 12, // Oyuncu etrafındaki yarıçap (blok cinsinden)
+            unloadDistance: 16 // Bu mesafeden uzak bloklar silinir
+        };
+
+        const state = {
+            moveForward: false, moveBackward: false,
+            moveLeft: false, moveRight: false,
+            canJump: false,
+            velocity: new THREE.Vector3(),
+            direction: new THREE.Vector3(),
+            selectedBlockType: 'grass',
+            isLocked: false, isFlying: false, isSmartBoard: false
+        };
+
+        const modal = document.getElementById('startup-modal');
+        const touchControls = document.getElementById('touch-controls');
+        const blocker = document.getElementById('blocker');
+        const instructions = document.getElementById('instructions');
+
+        function setSmartBoard(isSmart) {
+            state.isSmartBoard = isSmart;
+            modal.style.display = 'none';
+            if (state.isSmartBoard) {
+                touchControls.style.display = 'block';
+                blocker.style.display = 'none';
+                instructions.style.display = 'none';
+                state.isLocked = true;
+                setupTouchEvents();
+            } else {
+                blocker.style.display = 'flex';
+                setupPointerLock();
+            }
+            setupMaterials();
+        }
+
+        // --- SAHNE ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB); 
+        scene.fog = new THREE.Fog(0x87CEEB, 10, 30); 
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: false });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+        dirLight.position.set(50, 100, 50);
+        scene.add(dirLight);
+
+        // --- BLOK YÖNETİMİ (SONSUZ DÜNYA) ---
+        const world = new Map(); // "x,y,z" -> {type, index}
+        const generatedColumns = new Set(); // "x,z" (Sütunlar)
+        const freeIndices = []; // Silinen blokların indekslerini sakla ve yeniden kullan
+        let instanceCount = 0;
+        let instanceMesh;
+        const dummy = new THREE.Object3D();
+        const textureLoader = new THREE.TextureLoader();
+        let mainMaterial;
+
+        const blockTypes = {
+            grass:  { color: '#5C9E66' }, dirt:   { color: '#5C4033' }, stone:  { color: '#7D7D7D' },
+            wood:   { color: '#5C4033' }, leaves: { color: '#3A7A3A' }, plank:  { color: '#9C7A4A' }
+        };
+        const blockKeys = Object.keys(blockTypes);
+
+        function setupMaterials() {
+            const c = document.createElement('canvas'); c.width=64; c.height=64;
+            const ctx = c.getContext('2d'); ctx.fillStyle = '#777'; ctx.fillRect(0,0,64,64);
+            const fallbackTexture = new THREE.CanvasTexture(c); fallbackTexture.magFilter = THREE.NearestFilter;
+
+            textureLoader.load('alicigdem.png', (tex) => {
+                tex.magFilter = THREE.NearestFilter;
+                mainMaterial = new THREE.MeshLambertMaterial({ map: tex });
+                initializeGame(mainMaterial);
+            }, undefined, () => {
+                document.getElementById('error-message').style.display = 'block';
+                mainMaterial = new THREE.MeshLambertMaterial({ map: fallbackTexture });
+                initializeGame(mainMaterial);
+            });
+        }
+
+        function initializeGame(mat) {
+            const geo = new THREE.BoxGeometry(1, 1, 1);
+            instanceMesh = new THREE.InstancedMesh(geo, mat, config.maxInstances);
+            instanceMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+            scene.add(instanceMesh);
+            
+            // Başlangıçta oyuncunun etrafını oluştur
+            updateWorld(true);
+            animate();
+        }
+
+        function updateBlockMatrix(index, x, y, z) {
+            if (x === null) {
+                // Bloğu gizle (sıfırla)
+                instanceMesh.setMatrixAt(index, new THREE.Matrix4().makeScale(0,0,0));
+            } else {
+                dummy.position.set(x, y, z);
+                dummy.updateMatrix();
+                instanceMesh.setMatrixAt(index, dummy.matrix);
+            }
+            instanceMesh.instanceMatrix.needsUpdate = true;
+        }
+
+        function addBlockToWorld(x, y, z, type) {
+            const key = `${x},${y},${z}`;
+            if (world.has(key)) return;
+
+            let index;
+            if (freeIndices.length > 0) {
+                index = freeIndices.pop(); // Boş bir indeksi yeniden kullan
+            } else {
+                if (instanceCount >= config.maxInstances) return; // Limit doldu
+                index = instanceCount++;
+            }
+
+            world.set(key, { type: type, index: index });
+            updateBlockMatrix(index, x, y, z);
+        }
+
+        function removeBlockFromWorld(x, y, z) {
+            const key = `${x},${y},${z}`;
+            const d = world.get(key);
+            if (!d) return;
+            
+            updateBlockMatrix(d.index, null, null, null); // Görünmez yap
+            freeIndices.push(d.index); // İndeksi serbest bırak
+            world.delete(key);
+        }
+
+        // --- SONSUZ DÜNYA MANTIĞI ---
+        function updateWorld(force = false) {
+            const px = Math.floor(controls.position.x);
+            const pz = Math.floor(controls.position.z);
+            const r = config.renderDistance;
+
+            // 1. Yeni Alanları Oluştur
+            for (let x = px - r; x <= px + r; x++) {
+                for (let z = pz - r; z <= pz + r; z++) {
+                    const colKey = `${x},${z}`;
+                    if (!generatedColumns.has(colKey)) {
+                        generateColumn(x, z);
+                        generatedColumns.add(colKey);
+                    }
+                }
+            }
+
+            // 2. Uzak Alanları Temizle (Performans için)
+            // Her 30 karede bir temizlik yap, sürekli değil
+            if (force || Math.random() < 0.05) {
+                const uR = config.unloadDistance;
+                for (const key of world.keys()) {
+                    const [bx, by, bz] = key.split(',').map(Number);
+                    // Basit mesafe kontrolü (kare)
+                    if (Math.abs(bx - px) > uR || Math.abs(bz - pz) > uR) {
+                        removeBlockFromWorld(bx, by, bz);
+                        // Sütun setinden de silmek gerekir ama blok bazlı silme yeterli şimdilik
+                    }
+                }
+                
+                // Sütun temizliği
+                for (const colKey of generatedColumns) {
+                    const [cx, cz] = colKey.split(',').map(Number);
+                     if (Math.abs(cx - px) > uR || Math.abs(cz - pz) > uR) {
+                        generatedColumns.delete(colKey);
+                     }
+                }
+            }
+        }
+
+        function generateColumn(x, z) {
+            // Zemin (Hep Düz)
+            addBlockToWorld(x, 0, z, 'grass');
+            addBlockToWorld(x, -1, z, 'dirt');
+            addBlockToWorld(x, -2, z, 'stone');
+
+            // Rastgele Ağaçlar (Düz zemine)
+            if (Math.random() < 0.005) { // %0.5 şans
+                createTree(x, 1, z);
+            }
+        }
+
+        function createTree(x,y,z) {
+            addBlockToWorld(x, y, z, 'wood'); 
+            addBlockToWorld(x, y+1, z, 'wood'); 
+            addBlockToWorld(x, y+2, z, 'wood');
+            for(let i=-1; i<=1; i++) for(let j=-1; j<=1; j++) addBlockToWorld(x+i, y+3, z+j, 'leaves');
+            addBlockToWorld(x, y+4, z, 'leaves');
+        }
+
+        // --- KONTROLLER ---
+        const controls = new THREE.Object3D();
+        controls.add(camera);
+        scene.add(controls);
+        controls.position.y = 2;
+
+        function setupPointerLock() {
+            blocker.addEventListener('click', () => document.body.requestPointerLock());
+            document.addEventListener('pointerlockchange', () => {
+                if (document.pointerLockElement === document.body) {
+                    state.isLocked = true; blocker.style.display = 'none';
+                } else {
+                    state.isLocked = false; blocker.style.display = 'flex';
+                }
+            });
+            document.addEventListener('mousemove', (e) => {
+                if (state.isLocked) {
+                    controls.rotation.y -= e.movementX * 0.002;
+                    camera.rotation.x -= e.movementY * 0.002;
+                    camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotation.x));
+                }
+            });
+        }
+
+        function setupTouchEvents() {
+            const bindBtn = (id, prop) => {
+                const el = document.getElementById(id);
+                el.addEventListener('mousedown', () => state[prop] = true);
+                el.addEventListener('mouseup', () => state[prop] = false);
+                el.addEventListener('touchstart', (e) => { e.preventDefault(); state[prop] = true; });
+                el.addEventListener('touchend', (e) => { e.preventDefault(); state[prop] = false; });
+            };
+            
+            bindBtn('btn-up', 'moveForward');
+            bindBtn('btn-down', 'moveBackward');
+            
+            // TERS MANTIK: Sol butona basınca Sağa Git (moveLeft değişkeni sağa gitmeyi tetikler)
+            // Bu değişken isimleri ters olduğu için:
+            // moveLeft = Sağa Git (Fizik motorunda)
+            // moveRight = Sola Git (Fizik motorunda)
+            bindBtn('btn-left', 'moveLeft');   // Sola bas -> Sağa Git (İSTEK)
+            bindBtn('btn-right', 'moveRight'); // Sağa bas -> Sola Git (İSTEK)
+
+            // Aksiyonlar
+            const btnJump = document.getElementById('btn-jump');
+            const jumpAction = (e) => {
+                e.preventDefault();
+                if(state.isFlying) state.velocity.y = config.movementAcceleration/2;
+                else if(state.canJump) { state.velocity.y += config.jumpStrength; state.canJump = false; }
+            };
+            btnJump.addEventListener('touchstart', jumpAction);
+            btnJump.addEventListener('touchend', () => { if(state.isFlying) state.velocity.y = 0; });
+
+            const btnFly = document.getElementById('btn-fly');
+            const flyToggle = (e) => { e.preventDefault(); state.isFlying = !state.isFlying; state.velocity.y = 0; };
+            btnFly.addEventListener('touchstart', flyToggle);
+
+            // Kırma (Sol Tık)
+            const btnBreak = document.getElementById('btn-break');
+            btnBreak.addEventListener('touchstart', (e) => { e.preventDefault(); performRaycastAction(0); });
+
+            // Koyma (Sağ Tık)
+            const btnPlace = document.getElementById('btn-place');
+            btnPlace.addEventListener('touchstart', (e) => { e.preventDefault(); performRaycastAction(2); });
+
+            // Kamera Döndürme
+            let lastX = 0, lastY = 0;
+            document.addEventListener('touchstart', (e) => {
+                if (!e.target.classList.contains('touch-btn')) {
+                    lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
+                }
+            }, {passive: false});
+            document.addEventListener('touchmove', (e) => {
+                if (!e.target.classList.contains('touch-btn')) {
+                    const dx = e.touches[0].clientX - lastX;
+                    const dy = e.touches[0].clientY - lastY;
+                    controls.rotation.y -= dx * 0.005;
+                    camera.rotation.x -= dy * 0.005;
+                    camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotation.x));
+                    lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
+                }
+            }, {passive: false});
+        }
+
+        const raycaster = new THREE.Raycaster();
+        raycaster.far = config.reach;
+        const center = new THREE.Vector2(0,0);
+
+        function performRaycastAction(button) {
+            raycaster.setFromCamera(center, camera);
+            const intersects = raycaster.intersectObject(instanceMesh);
+
+            if (intersects.length > 0) {
+                const intersect = intersects[0];
+                const instanceIndex = intersect.instanceId;
+                
+                let blockPosKey = null;
+                for (const [key, data] of world.entries()) {
+                    if (data.index === instanceIndex) { blockPosKey = key; break; }
+                }
+                if (!blockPosKey) return;
+                const [x, y, z] = blockPosKey.split(',').map(Number);
+
+                if (button === 0) { // Kır
+                    removeBlockFromWorld(x, y, z);
+                } else if (button === 2) { // Koy
+                    // DÜZELTME: Yüzey normali kullanarak kesin yerleştirme
+                    // InstancedMesh'te face normali bazen transformed olmayabilir ama genellikle çalışır
+                    let nx, ny, nz;
+                    
+                    if (intersect.face) {
+                        nx = x + intersect.face.normal.x;
+                        ny = y + intersect.face.normal.y;
+                        nz = z + intersect.face.normal.z;
+                    } else {
+                        // Fallback (Normal yoksa)
+                        const p = intersect.point;
+                        let dx=0, dy=0, dz=0;
+                        if(Math.abs(p.y - (y+0.5)) < 0.01) dy=1;
+                        else if(Math.abs(p.y - (y-0.5)) < 0.01) dy=-1;
+                        else if(Math.abs(p.x - (x+0.5)) < 0.01) dx=1;
+                        else if(Math.abs(p.x - (x-0.5)) < 0.01) dx=-1;
+                        else dz = p.z > z ? 1 : -1;
+                        nx = x+dx; ny = y+dy; nz = z+dz;
+                    }
+
+                    // Yuvarlama hatalarını önlemek için tam sayıya çevir
+                    nx = Math.round(nx); ny = Math.round(ny); nz = Math.round(nz);
+
+                    const playerPos = controls.position.clone(); playerPos.y -= 1;
+                    if (new THREE.Vector3(nx, ny, nz).distanceTo(playerPos) > 1.2) {
+                        addBlockToWorld(nx, ny, nz, state.selectedBlockType);
+                    }
+                }
+            }
+        }
+
+        document.addEventListener('mousedown', (e) => {
+            if (!state.isLocked || state.isSmartBoard) return;
+            performRaycastAction(e.button);
+        });
+
+        document.addEventListener('keydown', (e) => {
+            switch(e.code) {
+                case 'KeyW': state.moveForward = true; break;
+                case 'KeyS': state.moveBackward = true; break;
+                case 'KeyA': state.moveRight = true; break; // A=Sağ (Ters)
+                case 'KeyD': state.moveLeft = true; break;  // D=Sol (Ters)
+                case 'Space': 
+                    if(state.isFlying) state.velocity.y = config.movementAcceleration/2;
+                    else if(state.canJump) { state.velocity.y += config.jumpStrength; state.canJump = false; }
+                    break;
+                case 'ShiftLeft': if(state.isFlying) state.velocity.y = -config.movementAcceleration/2; break;
+                case 'KeyF': state.isFlying = !state.isFlying; state.velocity.y = 0; if(!state.isFlying) state.canJump=false; break;
+                case 'Digit1': selectBlock(0); break;
+                case 'Digit2': selectBlock(1); break;
+                case 'Digit3': selectBlock(2); break;
+                case 'Digit4': selectBlock(3); break;
+                case 'Digit5': selectBlock(4); break;
+            }
+        });
+        document.addEventListener('keyup', (e) => {
+            switch(e.code) {
+                case 'KeyW': state.moveForward = false; break;
+                case 'KeyS': state.moveBackward = false; break;
+                case 'KeyA': state.moveRight = false; break;
+                case 'KeyD': state.moveLeft = false; break;
+                case 'Space': case 'ShiftLeft': if(state.isFlying) state.velocity.y = 0; break;
+            }
+        });
+
+        let prevTime = performance.now();
+        const highlightGeo = new THREE.BoxGeometry(1.005, 1.005, 1.005);
+        const highlightMesh = new THREE.LineSegments(new THREE.WireframeGeometry(highlightGeo), new THREE.LineBasicMaterial({ color: 0x000000 }));
+        scene.add(highlightMesh); highlightMesh.visible = false;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = performance.now();
+            const delta = (time - prevTime) / 1000;
+            prevTime = time;
+
+            if (state.isLocked) {
+                // Dünya güncelleme (Sonsuzluk)
+                updateWorld();
+
+                raycaster.setFromCamera(center, camera);
+                const intersects = raycaster.intersectObject(instanceMesh);
+                if(intersects.length > 0) {
+                    const m = new THREE.Matrix4();
+                    instanceMesh.getMatrixAt(intersects[0].instanceId, m);
+                    m.decompose(highlightMesh.position, highlightMesh.rotation, highlightMesh.scale);
+                    highlightMesh.visible = true;
+                } else highlightMesh.visible = false;
+
+                state.velocity.x -= state.velocity.x * 10.0 * delta;
+                state.velocity.z -= state.velocity.z * 10.0 * delta;
+                if (!state.isFlying) state.velocity.y -= config.gravity * delta;
+                
+                state.direction.z = Number(state.moveForward) - Number(state.moveBackward);
+                state.direction.x = Number(state.moveRight) - Number(state.moveLeft);
+                state.direction.normalize();
+
+                if (state.moveForward || state.moveBackward) state.velocity.z -= state.direction.z * config.movementAcceleration * delta;
+                if (state.moveLeft || state.moveRight) state.velocity.x -= state.direction.x * config.movementAcceleration * delta;
+
+                controls.translateX(state.velocity.x * delta);
+                controls.translateZ(state.velocity.z * delta);
+                controls.position.y += state.velocity.y * delta;
+
+                if (!state.isFlying) {
+                    const downRay = new THREE.Raycaster(controls.position, new THREE.Vector3(0,-1,0), 0, 1.6);
+                    const hits = downRay.intersectObject(instanceMesh);
+                    if (hits.length > 0) {
+                        if (state.velocity.y < 0) {
+                            state.velocity.y = 0;
+                            const m = new THREE.Matrix4();
+                            instanceMesh.getMatrixAt(hits[0].instanceId, m);
+                            const p = new THREE.Vector3(); m.decompose(p, new THREE.Quaternion(), new THREE.Vector3());
+                            controls.position.y = p.y + 1.6;
+                            state.canJump = true;
+                        }
+                    } else state.canJump = false;
+                }
+                if (controls.position.y < -10) { state.velocity.y=0; controls.position.set(0,10,0); }
+            }
+            renderer.render(scene, camera);
+        }
+
+        const hotbar = document.getElementById('hotbar');
+        blockKeys.slice(0, 5).forEach((key, index) => {
+            const el = document.createElement('div'); el.className = 'slot ' + (index === 0 ? 'active' : '');
+            el.style.backgroundColor = blockTypes[key].color; el.onclick = () => selectBlock(index);
+            hotbar.appendChild(el);
+        });
+        function selectBlock(index) {
+            state.selectedBlockType = blockKeys[index];
+            document.querySelectorAll('.slot').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.slot')[index].classList.add('active');
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>

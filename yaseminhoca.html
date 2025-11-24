@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yasemin Öğretmenimize - 8/B Sınıfı</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Raleway:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        /* SIFIRLAMA & TEMEL AYARLAR */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Raleway', sans-serif;
+            background-color: #f3f4f6;
+            color: #333;
+            overflow-x: hidden;
+            scroll-behavior: smooth; /* Yumuşak kaydırma */
+        }
+
+        /* ARKA PLAN & PARALAKS */
+        .hero {
+            height: 100vh;
+            background: linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.3)), url('https://images.unsplash.com/photo-1497032628192-86f99bcd76bc?w=1600&q=80'); 
+            background-attachment: fixed;
+            background-size: cover;
+            background-position: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            color: white;
+            position: relative;
+        }
+
+        /* GİRİŞ YAZILARI */
+        .hero-content {
+            z-index: 2;
+            padding: 20px;
+            animation: fadeInUp 1.5s ease-out;
+        }
+
+        h1 {
+            font-family: 'Playfair Display', serif;
+            font-size: 4.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 10px rgba(0,0,0,0.5);
+        }
+
+        .sub-title {
+            font-size: 1.5rem;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            margin-bottom: 30px;
+            border-top: 1px solid white;
+            border-bottom: 1px solid white;
+            display: inline-block;
+            padding: 10px 20px;
+        }
+
+        /* PROFİL FOTOĞRAFI ÇERÇEVESİ */
+        .profile-frame {
+            width: 200px;
+            height: 200px;
+            margin: 0 auto 20px;
+            border-radius: 50%;
+            padding: 5px;
+            background: rgba(255, 255, 255, 0.3);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 0 20px rgba(0,0,0,0.3);
+        }
+
+        .profile-img {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid white;
+        }
+
+        /* AŞAĞI KAYDIR OKU */
+        .scroll-down {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            animation: bounce 2s infinite;
+            font-size: 2rem;
+            color: white;
+            cursor: pointer;
+        }
+
+        /* MEKTUP BÖLÜMÜ */
+        .section-letter {
+            padding: 80px 20px;
+            background: #fff;
+            text-align: center;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .letter-card {
+            background: #fffaf0;
+            padding: 50px;
+            border: 1px solid #eec;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+            position: relative;
+        }
+
+        .letter-card::before {
+            content: '"';
+            font-family: 'Playfair Display', serif;
+            font-size: 10rem;
+            color: #fce4e4;
+            position: absolute;
+            top: -50px;
+            left: 20px;
+            z-index: 0;
+        }
+
+        .letter-text {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.3rem;
+            line-height: 2;
+            position: relative;
+            z-index: 1;
+            color: #555;
+        }
+
+        /* DERS BÖLÜMÜ */
+        .section-lesson {
+            padding: 80px 20px;
+            background: #fdfbfb; 
+            text-align: center;
+        }
+
+        .lesson-title {
+            font-family: 'Playfair Display', serif;
+            font-size: 2.5rem;
+            color: #ff6b6b; 
+            margin-bottom: 10px;
+        }
+
+        .lesson-intro {
+            font-size: 1.1rem;
+            margin-bottom: 40px;
+            color: #666;
+        }
+
+        .lesson-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .lesson-card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+            text-align: left;
+            border-left: 5px solid #ff9a9e; 
+            transition: transform 0.3s;
+        }
+
+        .lesson-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .lesson-card h3 {
+            color: #4a4a4a;
+            margin-bottom: 10px;
+            font-family: 'Playfair Display', serif;
+        }
+
+        .lesson-card p {
+            font-size: 0.95rem;
+            line-height: 1.6;
+            color: #777;
+        }
+
+        /* FOOTER */
+        footer {
+            background: #333;
+            color: white;
+            text-align: center;
+            padding: 40px;
+            font-size: 0.9rem;
+        }
+
+        /* ANİMASYONLAR */
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes bounce {
+            0%, 20%, 50%, 80%, 100% {transform: translateY(0) translateX(-50%);}
+            40% {transform: translateY(-10px) translateX(-50%);}
+            60% {transform: translateY(-5px) translateX(-50%);}
+        }
+
+        /* SCROLL REVEAL ANİMASYONU İÇİN EK KODLAR */
+        .reveal {
+            position: relative;
+            opacity: 0;
+            transform: translateY(50px);
+            transition: opacity 1s ease-out, transform 1s ease-out;
+        }
+
+        .reveal.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* MOBİL UYUM */
+        @media (max-width: 768px) {
+            h1 { font-size: 2.5rem; }
+            .sub-title { font-size: 1rem; }
+            .letter-card { padding: 30px; }
+            .lesson-title { font-size: 2rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="hero">
+        <div class="hero-content">
+            <div class="profile-frame">
+                <img src="yaseminhoca.jpg" alt="Yasemin Hoca" class="profile-img">
+            </div>
+            <h1>Yasemin Öğretmenimiz</h1>
+            <div class="sub-title">İYİ Kİ VARSINIZ - 8/B SINIFI</div>
+        </div>
+        <a href="#letter-section" class="scroll-down">↓</a>
+    </div>
+
+    <section class="section-letter" id="letter-section">
+        <div class="container reveal">
+            <div class="letter-card">
+                <h2>Sevgili Öğretmenimiz,</h2>
+                <br>
+                <p class="letter-text">
+                    Bize harfleri öğretmekle kalmayıp, kelimelere anlam yüklemeyi öğrettiniz. 
+                    Sadece dersi değil, hayatı sevdirdiniz. Sabrınız, şefkatiniz ve o hiç eksilmeyen güler yüzünüz için minnettarız.
+                    <br><br>
+                    8/B sınıfı olarak, sizin gibi bir öğretmene sahip olduğumuz için kendimizi çok şanslı hissediyoruz.
+                    Öğretmenler gününüz kutlu olsun!
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <section class="section-lesson">
+        <div class="container reveal">
+            <h2 class="lesson-title">Öğretmenimizden Bir Ders Notu: Cümlenin Ögeleri</h2>
+            <p class="lesson-intro">Cümleye anlam katan her öge, tıpkı sizin gibi, hayatımıza bir şeyler katıyor.</p>
+            <div class="lesson-grid">
+                
+                <div class="lesson-card reveal">
+                    <h3>1. Yüklem</h3>
+                    <p><strong>(Temel Öge)</strong> Cümlede yargıyı bildirir. İlk bulunan ve en önemli ögedir. Sınıfımızdaki **Dayanışma** gibi, her şeyi bir arada tutar.</p>
+                </div>
+                
+                <div class="lesson-card reveal" style="transition-delay: 0.1s;">
+                    <h3>2. Özne</h3>
+                    <p>İşi yapanı veya durumu üzerine alanı gösterir. Tıpkı **8/B sınıfının çalışkan ruhu** gibi, cümlenin sahibidir.</p>
+                </div>
+                
+                <div class="lesson-card reveal" style="transition-delay: 0.2s;">
+                    <h3>3. Nesne (Belirtili/Belirtisiz)</h3>
+                    <p>Yapılan işten (eylemden) etkilenen ögedir. Tıpkı **öğrenmeye olan büyük merakımız** gibi, her zaman oradadır.</p>
+                </div>
+                
+                <div class="lesson-card reveal" style="transition-delay: 0.3s;">
+                    <h3>4. Tümleç (Dolaylı/Zarf)</h3>
+                    <p>Yüklemi yer, zaman, durum vb. yönlerden tamamlar. Tıpkı **öğretmenimizin rehberliği** gibi, her zaman yanımızdadır.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <p>Sizi Çok Seviyoruz Yasemin Hocam! &copy; 2024 - 8/B</p>
+        <button style="margin-top:10px; padding: 10px 20px; background:none; border:1px solid white; color:white; cursor:pointer;" onclick="launchConfetti()">Kutlamayı Yeniden Başlat! 🎉</button>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+    <script>
+        // Dramatik Konfeti Başlatma Fonksiyonu
+        function launchConfetti(x1 = 0, x2 = 1) {
+            var duration = 4 * 1000;
+            var animationEnd = Date.now() + duration;
+            var defaults = { startVelocity: 30, spread: 360, ticks: 100, zIndex: 9999 };
+
+            var interval = setInterval(function() {
+                var timeLeft = animationEnd - Date.now();
+                if (timeLeft <= 0) {
+                    return clearInterval(interval);
+                }
+
+                var particleCount = 100 * (timeLeft / duration);
+                
+                // Sol taraftan patlat
+                confetti(Object.assign({}, defaults, { particleCount, origin: { x: x1, y: 0.7 } })); 
+                // Sağ taraftan patlat
+                confetti(Object.assign({}, defaults, { particleCount, origin: { x: x2, y: 0.7 } }));
+            }, 500);
+        }
+
+        // Kaydırmalı Açılış (Scroll Reveal) Fonksiyonu
+        function revealElements() {
+            const reveals = document.querySelectorAll('.reveal');
+            for (let i = 0; i < reveals.length; i++) {
+                const windowHeight = window.innerHeight;
+                const revealTop = reveals[i].getBoundingClientRect().top;
+                const revealPoint = 150; 
+
+                // Eğer öge, ekranın altından (150 piksel yukarısında) ise
+                if (revealTop < windowHeight - revealPoint) {
+                    reveals[i].classList.add('active');
+                }
+            }
+        }
+        
+        // Olay dinleyicileri
+        window.addEventListener('scroll', revealElements);
+        
+        // Sayfa Yüklenince
+        window.onload = function() {
+            // Sayfa açılır açılmaz konfeti patlat
+            launchConfetti(0.1, 0.9); // Sol ve Sağ köşelerden patlama
+            
+            // İlk açılışta görünmesi gereken ögeleri kontrol et
+            revealElements();
+        };
+
+        // Scroll Down Linki
+        document.querySelector('.scroll-down').addEventListener('click', function(e) {
+            e.preventDefault();
+            document.getElementById('letter-section').scrollIntoView({ behavior: 'smooth' });
+        });
+    </script>
+</body>
+</html>

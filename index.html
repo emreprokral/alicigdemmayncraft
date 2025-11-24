@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minecraft - Single File</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Courier New', Courier, monospace; }
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><path d="M10 0v20M0 10h20" stroke="white" stroke-width="2"/></svg>');
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            opacity: 0.8;
+        }
+        #instructions {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            pointer-events: none;
+            user-select: none;
+        }
+        #hotbar {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 5px;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 5px;
+            border-radius: 5px;
+        }
+        .slot {
+            width: 40px;
+            height: 40px;
+            border: 2px solid rgba(255,255,255,0.3);
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        .slot.active {
+            border-color: white;
+            transform: scale(1.1);
+        }
+        #blocker {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 24px;
+            flex-direction: column;
+            z-index: 999;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="crosshair"></div>
+    <div id="instructions">
+        <b>WASD</b> Hareket | <b>SPACE</b> Zıpla<br>
+        <b>Tıkla</b> Kaz | <b>Sağ Tıkla</b> Yerleştir<br>
+        <b>1-5</b> Blok Seç
+    </div>
+    
+    <div id="hotbar"></div>
+
+    <div id="blocker">
+        <div>Oynamak İçin Tıklayın</div>
+    </div>
+
+    <!-- Three.js CDN'den yükleniyor -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        // --- 1. YAPILANDIRMA VE DURUM ---
+        const config = {
+            chunkSize: 24, // Başlangıç dünya alanının boyutu
+            gravity: 25.0,
+            jumpStrength: 10,
+            speed: 5.0,
+            reach: 6 // Bloklarla etkileşim mesafesi
+        };
+
+        const state = {
+            moveForward: false,
+            moveBackward: false,
+            moveLeft: false,
+            moveRight: false,
+            canJump: false,
+            velocity: new THREE.Vector3(),
+            direction: new THREE.Vector3(),
+            selectedBlockType: 'grass',
+            isLocked: false
+        };
+
+        const objects = []; // Çarpışma tespiti için
+        const blockMeshes = []; // Işın dökümü (Raycasting) için
+        
+        // Blok Tanımları (Artık renkler kullanılmayacak, sadece tipler tutuluyor)
+        const blockTypes = {
+            grass:  { color: '#5C9E66', transparent: false },
+            dirt:   { color: '#5C4033', transparent: false },
+            stone:  { color: '#7D7D7D', transparent: false },
+            wood:   { color: '#5C4033', transparent: false },
+            leaves: { color: '#3A7A3A', transparent: true }, // Şeffaflık özelliği korunuyor
+            plank:  { color: '#9C7A4A', transparent: false }
+        };
+        const blockKeys = Object.keys(blockTypes);
+
+        // --- 2. DOKU YÜKLEYİCİ (Harici Resim) ---
+        const textureLoader = new THREE.TextureLoader();
+        
+        // Tüm bloklar için kullanılacak tek doku
+        const singleTexture = textureLoader.load('alicigdem.png', 
+            // Başarılı yükleme geri çağırması
+            function(texture) {
+                // Dokunun pikselli görünmesi için filtre ayarı
+                texture.magFilter = THREE.NearestFilter; 
+                console.log("Alicigdem dokusu başarıyla yüklendi.");
+            },
+            // Hata geri çağırması
+            function(err) {
+                console.error('alicigdem.png yüklenirken hata oluştu:', err);
+                // Doku yüklenemezse geri dönüş malzemesi (siyah)
+                materials['fallback'] = new THREE.MeshLambertMaterial({ color: 0x000000 });
+            }
+        );
+
+        // Tüm bloklar için kullanılacak tek malzeme
+        const singleMaterial = new THREE.MeshLambertMaterial({ map: singleTexture });
+        
+        const materials = {};
+        blockKeys.forEach(key => {
+            let mat = singleMaterial;
+            
+            // Eğer blok şeffaf ise (yapraklar gibi), malzemeyi klonla ve şeffaflığı ayarla
+            if (blockTypes[key].transparent) {
+                mat = singleMaterial.clone();
+                mat.transparent = true;
+                mat.opacity = 0.9;
+                mat.alphaTest = 0.5; // Şeffaf kısımların düzgün görünmesi için
+            }
+            materials[key] = mat;
+        });
+
+        // Çim bloğu için özel malzeme dizisi (tüm yüzeyler artık aynı resmi kullanıyor)
+        const grassMat = [
+            singleMaterial, // Sağ
+            singleMaterial, // Sol
+            singleMaterial, // Üst
+            singleMaterial, // Alt
+            singleMaterial, // Ön
+            singleMaterial  // Arka
+        ];
+
+
+        // --- 3. SAHNE KURULUMU ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB); // Gökyüzü mavisi
+        scene.fog = new THREE.Fog(0x87CEEB, 10, 50); // Sis efekti
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: false });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        // Işıklar
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+        dirLight.position.set(50, 100, 50);
+        scene.add(dirLight);
+
+        // --- 4. DÜNYA OLUŞTURMA ---
+        const geometry = new THREE.BoxGeometry(1, 1, 1);
+        const chunkOffset = config.chunkSize / 2;
+
+        function addBlock(x, y, z, type) {
+            let mat = materials[type];
+            // Çim bloğu özel yüzey malzemesi dizisini kullanır
+            if (type === 'grass') mat = grassMat;
+
+            const mesh = new THREE.Mesh(geometry, mat);
+            mesh.position.set(x, y, z);
+            mesh.userData = { isBlock: true, type: type }; // Tanımlama
+            scene.add(mesh);
+            objects.push(mesh);
+            blockMeshes.push(mesh);
+            return mesh;
+        }
+
+        function generateWorld() {
+            // Zemin
+            for (let x = -chunkOffset; x < chunkOffset; x++) {
+                for (let z = -chunkOffset; z < chunkOffset; z++) {
+                    // Temel Kaya/Taş katmanları
+                    addBlock(x, -2, z, 'stone');
+                    addBlock(x, -1, z, 'dirt');
+                    
+                    // Yüzey
+                    let type = 'grass';
+                    // Basit "Biyomlar" (Artık renk farkı yok, sadece ağaç konumunu etkiler)
+                    if (Math.sin(x/4) * Math.cos(z/4) > 0.5) {
+                        // Ara sıra bir ağaç oluştur
+                        if (Math.random() > 0.95) createTree(x, 1, z);
+                    }
+                    addBlock(x, 0, z, type);
+                }
+            }
+        }
+
+        function createTree(x, y, z) {
+            // Gövde
+            addBlock(x, y, z, 'wood');
+            addBlock(x, y+1, z, 'wood');
+            addBlock(x, y+2, z, 'wood');
+            // Yapraklar
+            for(let i=-1; i<=1; i++) {
+                for(let j=-1; j<=1; j++) {
+                    addBlock(x+i, y+3, z+j, 'leaves');
+                }
+            }
+            addBlock(x, y+4, z, 'leaves');
+        }
+
+        // Dünya yüklenirken dokunun hazır olmasını beklemek en iyisidir, 
+        // ancak basitlik için doğrudan çağırıyoruz (THREE.js asenkron yüklemeyi yönetecektir).
+        generateWorld();
+
+        // --- 5. OYUNCU KONTROLCÜSÜ ---
+        const controls = new THREE.Object3D();
+        controls.add(camera);
+        scene.add(controls);
+        controls.position.y = 2; // Oyuncu yüksekliği
+
+        // İşaretçi Kilidi (Pointer Lock) mantığı
+        const blocker = document.getElementById('blocker');
+        
+        blocker.addEventListener('click', function () {
+            document.body.requestPointerLock();
+        });
+
+        document.addEventListener('pointerlockchange', function () {
+            if (document.pointerLockElement === document.body) {
+                state.isLocked = true;
+                blocker.style.display = 'none';
+            } else {
+                state.isLocked = false;
+                blocker.style.display = 'flex';
+            }
+        });
+
+        document.addEventListener('mousemove', function (event) {
+            if (state.isLocked) {
+                const movementX = event.movementX || 0;
+                const movementY = event.movementY || 0;
+                controls.rotation.y -= movementX * 0.002;
+                camera.rotation.x -= movementY * 0.002;
+                // Yukarı/aşağı bakmayı sınırla
+                camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x));
+            }
+        });
+
+        // Giriş İşleme
+        const onKeyDown = function (event) {
+            switch (event.code) {
+                case 'ArrowUp':
+                case 'KeyW': state.moveForward = true; break;
+                case 'ArrowLeft':
+                case 'KeyA': state.moveLeft = true; break;
+                case 'ArrowDown':
+                case 'KeyS': state.moveBackward = true; break;
+                case 'ArrowRight':
+                case 'KeyD': state.moveRight = true; break;
+                case 'Space':
+                    if (state.canJump === true) {
+                        state.velocity.y += config.jumpStrength;
+                        state.canJump = false;
+                    }
+                    break;
+                case 'Digit1': selectBlock(0); break;
+                case 'Digit2': selectBlock(1); break;
+                case 'Digit3': selectBlock(2); break;
+                case 'Digit4': selectBlock(3); break;
+                case 'Digit5': selectBlock(4); break;
+            }
+        };
+
+        const onKeyUp = function (event) {
+            switch (event.code) {
+                case 'ArrowUp':
+                case 'KeyW': state.moveForward = false; break;
+                case 'ArrowLeft':
+                case 'KeyA': state.moveLeft = false; break;
+                case 'ArrowDown':
+                case 'KeyS': state.moveBackward = false; break;
+                case 'ArrowRight':
+                case 'KeyD': state.moveRight = false; break;
+            }
+        };
+
+        document.addEventListener('keydown', onKeyDown);
+        document.addEventListener('keyup', onKeyUp);
+
+        // Işın Dökümü (Etkileşim)
+        const raycaster = new THREE.Raycaster();
+        raycaster.far = config.reach; // Erişim mesafesi
+        const mouse = new THREE.Vector2(0, 0); // Ekranın ortası (imleç)
+        
+        // Vurgu kutusu
+        const highlightGeo = new THREE.BoxGeometry(1.01, 1.01, 1.01);
+        const highlightMat = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.5 });
+        const highlightMesh = new THREE.LineSegments(new THREE.WireframeGeometry(highlightGeo), highlightMat);
+        scene.add(highlightMesh);
+        highlightMesh.visible = false;
+
+        document.addEventListener('mousedown', (event) => {
+            if (!state.isLocked) return;
+            
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(blockMeshes);
+
+            if (intersects.length > 0) {
+                const intersect = intersects[0];
+                
+                // Sol Tık: Bloğu Kaldır
+                if (event.button === 0) {
+                    scene.remove(intersect.object);
+                    objects.splice(objects.indexOf(intersect.object), 1);
+                    blockMeshes.splice(blockMeshes.indexOf(intersect.object), 1);
+                }
+                // Sağ Tık: Blok Yerleştir
+                else if (event.button === 2) {
+                    const normal = intersect.face.normal;
+                    const pos = intersect.object.position.clone().add(normal);
+                    
+                    // Oyuncunun içine blok yerleştirmeyi engelle
+                    const playerPos = controls.position.clone();
+                    playerPos.y -= 1; // Ayaklar için ayar
+                    if (pos.distanceTo(playerPos) > 1.2) {
+                        addBlock(pos.x, pos.y, pos.z, state.selectedBlockType);
+                    }
+                }
+            }
+        });
+
+        // --- 6. FİZİK VE GÜNCELLEME DÖNGÜSÜ ---
+        let prevTime = performance.now();
+        
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const time = performance.now();
+            const delta = (time - prevTime) / 1000;
+            prevTime = time;
+
+            if (state.isLocked) {
+                // Vurgu için ışın dökümü
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObjects(blockMeshes);
+                if(intersects.length > 0) {
+                    highlightMesh.visible = true;
+                    highlightMesh.position.copy(intersects[0].object.position);
+                } else {
+                    highlightMesh.visible = false;
+                }
+
+                // Fiziksel Hareket
+                state.velocity.x -= state.velocity.x * 10.0 * delta;
+                state.velocity.z -= state.velocity.z * 10.0 * delta;
+                state.velocity.y -= config.gravity * delta; // Yerçekimi
+
+                state.direction.z = Number(state.moveForward) - Number(state.moveBackward);
+                state.direction.x = Number(state.moveRight) - Number(state.moveLeft);
+                state.direction.normalize();
+
+                if (state.moveForward || state.moveBackward) state.velocity.z -= state.direction.z * 100.0 * delta * 2; // Hız çarpanı
+                if (state.moveLeft || state.moveRight) state.velocity.x -= state.direction.x * 100.0 * delta * 2;
+
+                // X/Z hareketini uygula
+                controls.translateX(state.velocity.x * delta);
+                controls.translateZ(state.velocity.z * delta);
+                
+                // Dikey hareket
+                controls.position.y += state.velocity.y * delta;
+                
+                // Zemin Çarpışması (Basit ışın dökümü)
+                const downRay = new THREE.Raycaster(controls.position, new THREE.Vector3(0, -1, 0), 0, 1.6);
+                const hits = downRay.intersectObjects(objects);
+                
+                if (hits.length > 0) {
+                    state.velocity.y = Math.max(0, state.velocity.y);
+                    state.canJump = true;
+                    // Bloğun üstüne otur
+                    controls.position.y = hits[0].object.position.y + 1.6; 
+                }
+                
+                // Dünyanın altına düşmeyi engelle
+                if (controls.position.y < -10) {
+                    state.velocity.y = 0;
+                    controls.position.y = 10;
+                    controls.position.x = 0;
+                    controls.position.z = 0;
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // --- 7. KULLANICI ARAYÜZÜ (UI) MANTIĞI ---
+        const hotbar = document.getElementById('hotbar');
+        // Sadece ilk 5 bloğu sıcak çubuğa ekle
+        blockKeys.slice(0, 5).forEach((key, index) => {
+            const el = document.createElement('div');
+            el.className = 'slot ' + (index === 0 ? 'active' : '');
+            // Hotbar rengini doku yerine blok tipinin varsayılan rengiyle ayarla
+            el.style.backgroundColor = blockTypes[key].color; 
+            el.onclick = () => selectBlock(index);
+            hotbar.appendChild(el);
+        });
+
+        function selectBlock(index) {
+            if(index >= blockKeys.length) return;
+            state.selectedBlockType = blockKeys[index];
+            const slots = document.querySelectorAll('.slot');
+            slots.forEach(s => s.classList.remove('active'));
+            if(slots[index]) slots[index].classList.add('active');
+        }
+
+        // Pencere Yeniden Boyutlandırma
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        // Animasyon döngüsünü başlat
+        animate();
+
+    </script>
+</body>
+</html>
